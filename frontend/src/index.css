@@ -1,25 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
-  --canvas: #363640;
-  --canvas-warm: #403f4b;
-  --surface: #484752;
-  --surface-muted: #575663;
-  --ink: #f3f0ea;
-  --ink-soft: #cbc6d1;
-  --muted: #aca7b5;
-  --muted-light: #888391;
-  --line: rgba(243, 240, 234, .14);
-  --line-strong: rgba(243, 240, 234, .26);
-  --violet: #b18cff;
-  --violet-soft: rgba(177, 140, 255, .17);
-  --blue: #82c4ff;
-  --green: #82ddb0;
-  --green-dim: rgba(130, 221, 176, .16);
-  --orange: #efb76f;
-  --orange-dim: rgba(239, 183, 111, .16);
-  --red: #f08f9b;
-  --red-dim: rgba(240, 143, 155, .16);
+  --canvas: #30303b;
+  --canvas-warm: #3a3947;
+  --surface: #454452;
+  --surface-muted: #5a5969;
+  --ink: #fffaf2;
+  --ink-soft: #dfd9e5;
+  --muted: #bdb5ca;
+  --muted-light: #958ca7;
+  --line: rgba(255, 250, 242, .18);
+  --line-strong: rgba(255, 250, 242, .34);
+  --violet: #c09aff;
+  --violet-soft: rgba(192, 154, 255, .23);
+  --blue: #68bdff;
+  --green: #55e09b;
+  --green-dim: rgba(85, 224, 155, .19);
+  --orange: #ffbf63;
+  --orange-dim: rgba(255, 191, 99, .19);
+  --red: #ff8793;
+  --red-dim: rgba(255, 135, 147, .19);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --mono: 'DM Mono', monospace;
   --sans: 'DM Sans', sans-serif;
@@ -36,6 +36,6 @@ button, a { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 ::selection { color: var(--surface); background: var(--violet); }
 :focus-visible { outline: 2px solid var(--violet); outline-offset: 4px; }
-body::before { content: ''; position: fixed; z-index: -1; inset: 0; pointer-events: none; opacity: .45; background-image: linear-gradient(rgba(243,240,234,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,240,234,.045) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(to bottom, black, transparent 78%); }
+body::before { content: ''; position: fixed; z-index: -1; inset: 0; pointer-events: none; opacity: .38; background-image: linear-gradient(rgba(255,250,242,.065) 1px, transparent 1px), linear-gradient(90deg, rgba(255,250,242,.065) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(to bottom, black, transparent 90%); }
 #root { min-height: 100vh; }
 .mono { font-family: var(--mono); }
