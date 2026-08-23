@@ -26,6 +26,20 @@ function useRoute() {
   const [route, setRoute] = useState(getRoute);
 
   useEffect(() => {
+    const revealItems = document.querySelectorAll('[data-reveal]');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px' });
+    revealItems.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [route]);
+
+  useEffect(() => {
     const onHashChange = () => setRoute(getRoute());
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
@@ -158,6 +172,7 @@ export default function App() {
 
   return (
     <div className="site-shell">
+      <div className="ambient-canvas" aria-hidden="true"><span className="ambient-orb ambient-orb-one" /><span className="ambient-orb ambient-orb-two" /><span className="ambient-orb ambient-orb-three" /></div>
       <SiteNav route={route} onNavigate={navigate} />
       {route === 'prototype' ? (
         <PrototypePage
@@ -176,8 +191,21 @@ export default function App() {
 }
 
 function SiteNav({ route, onNavigate }) {
+  const [scrollState, setScrollState] = useState({ scrolled: false, progress: 0 });
+
+  useEffect(() => {
+    const onScroll = () => {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      setScrollState({ scrolled: window.scrollY > 12, progress: maxScroll > 0 ? (window.scrollY / maxScroll) * 100 : 0 });
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <header className="site-nav">
+    <header className={`site-nav ${scrollState.scrolled ? 'site-nav-scrolled' : ''}`}>
+      <span className="scroll-progress" style={{ width: `${scrollState.progress}%` }} aria-hidden="true" />
       <button className="brand-lockup" onClick={() => onNavigate('home')} aria-label="Pulse home">
         <span className="brand-mark" aria-hidden="true"><span /><span /></span>
         <span className="brand-word">pulse<span className="brand-dot">.</span></span>
@@ -195,7 +223,7 @@ function SiteNav({ route, onNavigate }) {
 function LandingPage({ onNavigate }) {
   return (
     <main>
-      <section className="hero-section section-pad">
+      <section className="hero-section section-pad" data-reveal="hero">
         <div className="hero-grid page-width">
           <div className="hero-copy">
             <p className="eyebrow"><span className="eyebrow-line" /> Predictive infrastructure / 01</p>
@@ -211,9 +239,9 @@ function LandingPage({ onNavigate }) {
         </div>
       </section>
 
-      <section className="signal-strip"><div className="page-width strip-grid"><div><span className="strip-number">01</span><span>Observe the signal</span></div><div><span className="strip-number">02</span><span>Interpret the pattern</span></div><div className="strip-numbered-active"><span className="strip-number">03</span><span>Make the smallest safe move</span></div><div className="strip-note">A calm system is a system that can explain itself.</div></div></section>
+      <section className="signal-strip" data-reveal="strip"><div className="page-width strip-grid"><div><span className="strip-number">01</span><span>Observe the signal</span></div><div><span className="strip-number">02</span><span>Interpret the pattern</span></div><div className="strip-numbered-active"><span className="strip-number">03</span><span>Make the smallest safe move</span></div><div className="strip-note">A calm system is a system that can explain itself.</div></div></section>
 
-      <section id="how-it-works" className="story-section section-pad page-width">
+      <section id="how-it-works" className="story-section section-pad page-width" data-reveal="section">
         <div className="section-intro"><p className="eyebrow"><span className="eyebrow-line" /> The detect → predict → heal loop</p><h2>Not another alarm.<br /><span>A decision engine.</span></h2><p>Most monitors tell you something is wrong after it is already expensive. Pulse keeps a short memory of every container, combines present load with what came before, and acts only when the pattern deserves intervention.</p></div>
         <div className="loop-grid">
           <LoopStep index="01" title="Detect" accent="violet" detail="A lightweight telemetry source samples CPU, memory, and network behavior across the fleet." visual={<SignalVisual />} />
@@ -222,11 +250,11 @@ function LandingPage({ onNavigate }) {
         </div>
       </section>
 
-      <section id="architecture" className="architecture-section section-pad"><div className="page-width"><div className="section-intro compact"><p className="eyebrow"><span className="eyebrow-line" /> Designed for the hand-off to production</p><h2>Prototype today.<br /><span>Replace pieces, not the idea.</span></h2></div><div className="architecture-grid"><ArchitectureCard label="Telemetry source" prototype="SimulatedFleet" production="DockerTelemetrySource" /><ArchitectureCard label="Cooldown guard" prototype="In-memory store" production="Redis / TTL" /><ArchitectureCard label="Audit trail" prototype="SQLite" production="Postgres / TimescaleDB" /><ArchitectureCard label="Action executor" prototype="Simulated actions" production="Docker / HPA APIs" /></div></div></section>
+      <section id="architecture" className="architecture-section section-pad" data-reveal="section"><div className="page-width"><div className="section-intro compact"><p className="eyebrow"><span className="eyebrow-line" /> Designed for the hand-off to production</p><h2>Prototype today.<br /><span>Replace pieces, not the idea.</span></h2></div><div className="architecture-grid"><ArchitectureCard label="Telemetry source" prototype="SimulatedFleet" production="DockerTelemetrySource" /><ArchitectureCard label="Cooldown guard" prototype="In-memory store" production="Redis / TTL" /><ArchitectureCard label="Audit trail" prototype="SQLite" production="Postgres / TimescaleDB" /><ArchitectureCard label="Action executor" prototype="Simulated actions" production="Docker / HPA APIs" /></div></div></section>
 
-      <section className="proof-section section-pad page-width"><div className="proof-layout"><div className="proof-copy"><p className="eyebrow"><span className="eyebrow-line" /> Why this matters</p><h2>Context is the<br /><em>reliability feature.</em></h2><p>A spike is not a failure. A rising rolling average with growing memory delta might be. Pulse gives the model enough context to tell those stories apart—so your team gets fewer false positives and more useful actions.</p><button className="button button-secondary" onClick={() => onNavigate('prototype')}>Test both scenarios <span aria-hidden="true">↗</span></button></div><ComparisonPanel /></div></section>
+      <section className="proof-section section-pad page-width" data-reveal="section"><div className="proof-layout"><div className="proof-copy"><p className="eyebrow"><span className="eyebrow-line" /> Why this matters</p><h2>Context is the<br /><em>reliability feature.</em></h2><p>A spike is not a failure. A rising rolling average with growing memory delta might be. Pulse gives the model enough context to tell those stories apart—so your team gets fewer false positives and more useful actions.</p><button className="button button-secondary" onClick={() => onNavigate('prototype')}>Test both scenarios <span aria-hidden="true">↗</span></button></div><ComparisonPanel /></div></section>
 
-      <section className="cta-section section-pad"><div className="page-width cta-card"><div><p className="eyebrow"><span className="eyebrow-line" /> Your turn</p><h2>Give the fleet<br /><em>a little foresight.</em></h2></div><div className="cta-side"><p>Inject a transient spike. Then inject sustained risk. Watch what Pulse ignores—and what it quietly fixes.</p><button className="button button-primary" onClick={() => onNavigate('prototype')}>Open the prototype <span aria-hidden="true">↗</span></button></div></div></section>
+      <section className="cta-section section-pad" data-reveal="section"><div className="page-width cta-card"><div><p className="eyebrow"><span className="eyebrow-line" /> Your turn</p><h2>Give the fleet<br /><em>a little foresight.</em></h2></div><div className="cta-side"><p>Inject a transient spike. Then inject sustained risk. Watch what Pulse ignores—and what it quietly fixes.</p><button className="button button-primary" onClick={() => onNavigate('prototype')}>Open the prototype <span aria-hidden="true">↗</span></button></div></div></section>
 
       <footer className="site-footer page-width"><div className="footer-brand"><span className="brand-mark small" aria-hidden="true"><span /><span /></span><span>pulse.</span></div><p>Predictive Utilisation &amp; Self-Healing Engine · SIH 2026</p><p className="footer-note">Built to detect the difference.</p></footer>
     </main>
@@ -247,6 +275,6 @@ function ComparisonPanel() { return <div className="comparison-panel"><div class
 
 function PrototypePage({ containers, auditLog, stats, connStatus, onInject, onNavigate }) {
   const ordered = useMemo(() => [...containers].sort((a, b) => ({ at_risk: 0, transient_spike: 1, healthy: 2 }[a.predicted_state] ?? 3) - ({ at_risk: 0, transient_spike: 1, healthy: 2 }[b.predicted_state] ?? 3)), [containers]);
-  return <main className="prototype-page"><section className="prototype-hero page-width"><div><button className="back-link" onClick={() => onNavigate('home')}>← Back to overview</button><p className="eyebrow"><span className="eyebrow-line" /> Prototype workspace</p><h1>See Pulse<br /><em>make the call.</em></h1><p>Inject two very different kinds of pressure into the fleet. The model will decide when to stay calm—and when to act.</p></div><div className="prototype-legend"><div className="legend-line"><span className="live-dot" /> <strong>{connStatus === 'live' ? 'Backend connected' : 'Preview mode'}</strong></div><span className="mono">TICK / {stats?.tick_interval_seconds ?? 2}s</span><span className="legend-copy">{connStatus === 'live' ? 'Streaming live telemetry from FastAPI + WebSocket.' : 'Showing seeded telemetry. Start the backend for live updates.'}</span></div></section><section className="workspace page-width"><div className="workspace-toolbar"><div><span className="tiny-label">FLEET OVERVIEW</span><h2>Six containers, one clear picture.</h2></div><div className="toolbar-stats"><HeaderStat label="Monitored" value={stats?.total_containers ?? containers.length} /><HeaderStat label="At risk" value={stats?.at_risk_now ?? 0} accent="red" /><HeaderStat label="Actions" value={stats?.total_actions ?? auditLog.length} accent="violet" /></div></div><div className="workspace-grid"><section className="fleet-panel"><div className="panel-heading"><div><span className="tiny-label">LIVE CONTAINERS</span><p>{containers.length} services · sorted by urgency</p></div><span className="panel-dot"><span /> streaming</span></div><div className="fleet-grid">{ordered.map((container) => <ContainerCard key={container.id} container={container} onInject={onInject} />)}</div></section><aside className="workspace-side"><AuditLog entries={auditLog} /><section className="test-card"><span className="tiny-label">QUICK TEST</span><h3>Watch the model reason.</h3><p>Try a short spike first. It should be noticed, but not healed. Then create sustained risk to trigger an autonomous action.</p><div className="test-rule"><span>01</span><span>Inject Spike</span><span>→</span></div><div className="test-rule"><span>02</span><span>Inject At-Risk</span><span>→</span></div></section></aside></div></section><footer className="site-footer page-width"><div className="footer-brand"><span className="brand-mark small" aria-hidden="true"><span /><span /></span><span>pulse.</span></div><p>Prototype workspace · <button className="footer-link" onClick={() => onNavigate('home')}>Return to the story</button></p><p className="footer-note">detect → predict → heal</p></footer></main>;
+  return <main className="prototype-page"><section className="prototype-hero page-width" data-reveal="hero"><div><button className="back-link" onClick={() => onNavigate('home')}>← Back to overview</button><p className="eyebrow"><span className="eyebrow-line" /> Prototype workspace</p><h1>See Pulse<br /><em>make the call.</em></h1><p>Inject two very different kinds of pressure into the fleet. The model will decide when to stay calm—and when to act.</p></div><div className="prototype-legend"><div className="legend-line"><span className="live-dot" /> <strong>{connStatus === 'live' ? 'Backend connected' : 'Preview mode'}</strong></div><span className="mono">TICK / {stats?.tick_interval_seconds ?? 2}s</span><span className="legend-copy">{connStatus === 'live' ? 'Streaming live telemetry from FastAPI + WebSocket.' : 'Showing seeded telemetry. Start the backend for live updates.'}</span></div></section><section className="workspace page-width" data-reveal="section"><div className="workspace-toolbar"><div><span className="tiny-label">FLEET OVERVIEW</span><h2>Six containers, one clear picture.</h2></div><div className="toolbar-stats"><HeaderStat label="Monitored" value={stats?.total_containers ?? containers.length} /><HeaderStat label="At risk" value={stats?.at_risk_now ?? 0} accent="red" /><HeaderStat label="Actions" value={stats?.total_actions ?? auditLog.length} accent="violet" /></div></div><div className="workspace-grid"><section className="fleet-panel"><div className="panel-heading"><div><span className="tiny-label">LIVE CONTAINERS</span><p>{containers.length} services · sorted by urgency</p></div><span className="panel-dot"><span /> streaming</span></div><div className="fleet-grid">{ordered.map((container) => <ContainerCard key={container.id} container={container} onInject={onInject} />)}</div></section><aside className="workspace-side"><AuditLog entries={auditLog} /><section className="test-card"><span className="tiny-label">QUICK TEST</span><h3>Watch the model reason.</h3><p>Try a short spike first. It should be noticed, but not healed. Then create sustained risk to trigger an autonomous action.</p><div className="test-rule"><span>01</span><span>Inject Spike</span><span>→</span></div><div className="test-rule"><span>02</span><span>Inject At-Risk</span><span>→</span></div></section></aside></div></section><footer className="site-footer page-width"><div className="footer-brand"><span className="brand-mark small" aria-hidden="true"><span /><span /></span><span>pulse.</span></div><p>Prototype workspace · <button className="footer-link" onClick={() => onNavigate('home')}>Return to the story</button></p><p className="footer-note">detect → predict → heal</p></footer></main>;
 }
 function HeaderStat({ label, value, accent }) { return <div className={`header-stat ${accent ? `header-stat-${accent}` : ''}`}><strong>{value}</strong><span>{label}</span></div>; }
