@@ -1,25 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
-  --canvas: #f6f5f2;
-  --canvas-warm: #efeee9;
-  --surface: #ffffff;
-  --surface-muted: #ecebe7;
-  --ink: #18202b;
-  --ink-soft: #46505e;
-  --muted: #68717d;
-  --muted-light: #969da5;
-  --line: #dfded9;
-  --line-strong: #c5c4bf;
-  --violet: #5c4bd8;
-  --violet-soft: #ece9ff;
-  --blue: #2c79c7;
-  --green: #168258;
-  --green-dim: #e3f2eb;
-  --orange: #b66a12;
-  --orange-dim: #fbefd9;
-  --red: #c54854;
-  --red-dim: #f9e5e7;
+  --canvas: #363640;
+  --canvas-warm: #403f4b;
+  --surface: #484752;
+  --surface-muted: #575663;
+  --ink: #f3f0ea;
+  --ink-soft: #cbc6d1;
+  --muted: #aca7b5;
+  --muted-light: #888391;
+  --line: rgba(243, 240, 234, .14);
+  --line-strong: rgba(243, 240, 234, .26);
+  --violet: #b18cff;
+  --violet-soft: rgba(177, 140, 255, .17);
+  --blue: #82c4ff;
+  --green: #82ddb0;
+  --green-dim: rgba(130, 221, 176, .16);
+  --orange: #efb76f;
+  --orange-dim: rgba(239, 183, 111, .16);
+  --red: #f08f9b;
+  --red-dim: rgba(240, 143, 155, .16);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --mono: 'DM Mono', monospace;
   --sans: 'DM Sans', sans-serif;
@@ -36,6 +36,6 @@ button, a { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 ::selection { color: var(--surface); background: var(--violet); }
 :focus-visible { outline: 2px solid var(--violet); outline-offset: 4px; }
-body::before { content: ''; position: fixed; z-index: -1; inset: 0; pointer-events: none; opacity: .45; background-image: linear-gradient(rgba(24,32,43,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(24,32,43,.025) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(to bottom, black, transparent 78%); }
+body::before { content: ''; position: fixed; z-index: -1; inset: 0; pointer-events: none; opacity: .45; background-image: linear-gradient(rgba(243,240,234,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,240,234,.045) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(to bottom, black, transparent 78%); }
 #root { min-height: 100vh; }
 .mono { font-family: var(--mono); }
