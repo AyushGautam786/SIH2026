@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ContainerCard from './components/ContainerCard';
 import AuditLog from './components/AuditLog';
+import TopologyGraph from './components/TopologyGraph';
+import PipelineGroup from './components/PipelineGroup';
+import ContainerDetail from './components/ContainerDetail';
+import { getJson, injectScenario as postInject, groupByPipeline, pushHistory } from './lib/api';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const PREVIEW_CONTAINERS = [
   { id: 'preview-01', name: 'checkout-service-00', pipeline: 'checkout-service', cpu: 32, mem: 41, net: 48, predicted_state: 'healthy', confidence: 0.98, cooldown_seconds_left: 0, last_action: null },
@@ -59,28 +61,20 @@ export default function App() {
   const [auditLog, setAuditLog] = useState(PREVIEW_AUDIT);
   const [stats, setStats] = useState(PREVIEW_STATS);
   const [connStatus, setConnStatus] = useState('connecting');
+  const [selectedId, setSelectedId] = useState(null);
+  const [history, setHistory] = useState(() => new Map());
   const wsRef = useRef(null);
   const reconnTimer = useRef(null);
   const connectRef = useRef(null);
 
   const fetchAudit = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/audit?limit=100`);
-      if (!res.ok) throw new Error('Audit unavailable');
-      setAuditLog(await res.json());
-    } catch {
-      // Keep the seeded preview log when the optional local backend is offline.
-    }
+    const data = await getJson('/api/audit?limit=100');
+    if (data) setAuditLog(data); // else keep the seeded preview log
   }, []);
 
   const fetchStats = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/stats`);
-      if (!res.ok) throw new Error('Stats unavailable');
-      setStats(await res.json());
-    } catch {
-      // Preview values keep the testing workspace useful before the backend starts.
-    }
+    const data = await getJson('/api/stats');
+    if (data) setStats(data); // else keep preview values
   }, []);
 
   const connect = useCallback(() => {
@@ -107,6 +101,7 @@ export default function App() {
         const msg = JSON.parse(event.data);
         if (msg.type !== 'tick') return;
         setContainers(msg.containers);
+        setHistory((current) => pushHistory(current, msg.containers));
         if (msg.containers.some((container) => container.action_taken)) {
           fetchAudit();
           fetchStats();
@@ -139,7 +134,7 @@ export default function App() {
     } : container));
 
     try {
-      await fetch(`${API_URL}/api/inject/${containerId}/${scenario}`, { method: 'POST' });
+      await postInject(containerId, scenario);
     } catch {
       if (scenario === 'at_risk') {
         const target = containers.find((container) => container.id === containerId);
@@ -182,6 +177,9 @@ export default function App() {
           connStatus={connStatus}
           onInject={handleInject}
           onNavigate={navigate}
+          history={history}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
         />
       ) : (
         <LandingPage onNavigate={navigate} />
@@ -277,8 +275,91 @@ function HealVisual() { return <div className="step-visual heal-visual"><div cla
 function ArchitectureCard({ label, prototype, production }) { return <article className="architecture-card"><span className="tiny-label">{label}</span><div className="architecture-row"><span className="arch-key">Prototype</span><strong>{prototype}</strong></div><div className="architecture-row production-row"><span className="arch-key">Production</span><strong>{production}</strong></div></article>; }
 function ComparisonPanel() { return <div className="comparison-panel"><div className="comparison-header"><span>Scenario</span><span>Model sees</span><span>Response</span></div><div className="comparison-row"><span className="comparison-scenario"><i className="scenario-dot orange" /> Short burst</span><span><strong>High CPU</strong><small>low rolling avg</small></span><span className="response-muted">Observe</span></div><div className="comparison-row active"><span className="comparison-scenario"><i className="scenario-dot red" /> Sustained risk</span><span><strong>High CPU + MEM</strong><small>rising over time</small></span><span className="response-live">Heal <span>↗</span></span></div><div className="comparison-foot"><span className="mono">6 features</span><span>make the context count</span></div></div>; }
 
-function PrototypePage({ containers, auditLog, stats, connStatus, onInject, onNavigate }) {
+// ---------------------------------------------------------------------------
+// Prototype workspace - tabbed views: Fleet | Topology | Audit (PPTX slide 11)
+// ---------------------------------------------------------------------------
+function PrototypePage({ containers, auditLog, stats, connStatus, onInject, onNavigate, history, selectedId, onSelect }) {
+  const [view, setView] = useState('fleet');
+  const groups = useMemo(() => groupByPipeline(containers), [containers]);
   const ordered = useMemo(() => [...containers].sort((a, b) => ({ at_risk: 0, transient_spike: 1, healthy: 2 }[a.predicted_state] ?? 3) - ({ at_risk: 0, transient_spike: 1, healthy: 2 }[b.predicted_state] ?? 3)), [containers]);
-  return <main className="prototype-page"><section className="prototype-hero page-width" data-reveal="hero"><div><button className="back-link" onClick={() => onNavigate('home')}>← Back to overview</button><p className="eyebrow"><span className="eyebrow-line" /> Prototype workspace</p><h1>See Pulse<br /><em>make the call.</em></h1><p>Inject two very different kinds of pressure into the fleet. The model will decide when to stay calm—and when to act.</p></div><div className="prototype-legend"><div className="legend-stamp">RESEARCH BUILD / 26.08</div><div className="legend-line"><span className="live-dot" /> <strong>{connStatus === 'live' ? 'Backend connected' : 'Preview mode'}</strong></div><span className="mono">TICK / {stats?.tick_interval_seconds ?? 2}s</span><span className="legend-copy">{connStatus === 'live' ? 'Streaming live telemetry from FastAPI + WebSocket.' : 'Showing seeded telemetry. Start the backend for live updates.'}</span></div></section><section className="workspace page-width" data-reveal="section"><div className="workspace-toolbar"><div><span className="tiny-label">FLEET OVERVIEW</span><h2>Six containers, one clear picture.</h2></div><div className="toolbar-stats"><HeaderStat label="Monitored" value={stats?.total_containers ?? containers.length} /><HeaderStat label="At risk" value={stats?.at_risk_now ?? 0} accent="red" /><HeaderStat label="Actions" value={stats?.total_actions ?? auditLog.length} accent="violet" /></div></div><div className="workspace-grid"><section className="fleet-panel"><div className="panel-heading"><div><span className="tiny-label">LIVE CONTAINERS</span><p>{containers.length} services · sorted by urgency</p></div><span className="panel-dot"><span /> streaming</span></div><div className="fleet-grid">{ordered.map((container) => <ContainerCard key={container.id} container={container} onInject={onInject} />)}</div></section><aside className="workspace-side"><AuditLog entries={auditLog} /><section className="test-card"><span className="tiny-label">QUICK TEST</span><h3>Watch the model reason.</h3><p>Try a short spike first. It should be noticed, but not healed. Then create sustained risk to trigger an autonomous action.</p><div className="test-rule"><span>01</span><span>Inject Spike</span><span>→</span></div><div className="test-rule"><span>02</span><span>Inject At-Risk</span><span>→</span></div></section></aside></div></section><footer className="site-footer page-width"><div className="footer-brand"><span className="brand-mark small" aria-hidden="true"><span /><span /></span><span>pulse.</span></div><p>Prototype workspace · <button className="footer-link" onClick={() => onNavigate('home')}>Return to the story</button></p><p className="footer-note">detect → predict → heal</p></footer></main>;
+  const selected = selectedId ? containers.find((c) => c.id === selectedId) : null;
+
+  return (
+    <main className="prototype-page">
+      <section className="prototype-hero page-width" data-reveal="hero">
+        <div>
+          <button className="back-link" onClick={() => onNavigate('home')}>&larr; Back to overview</button>
+          <p className="eyebrow"><span className="eyebrow-line" /> Prototype workspace</p>
+          <h1>See Pulse<br /><em>make the call.</em></h1>
+          <p>Inject two very different kinds of pressure into the fleet. The model will decide when to stay calm&mdash;and when to act.</p>
+        </div>
+        <div className="prototype-legend">
+          <div className="legend-stamp">RESEARCH BUILD / 26.08</div>
+          <div className="legend-line"><span className="live-dot" /> <strong>{connStatus === 'live' ? 'Backend connected' : 'Preview mode'}</strong></div>
+          <span className="mono">TICK / {stats?.tick_interval_seconds ?? 3}s</span>
+          <span className="legend-copy">{connStatus === 'live' ? 'Streaming live telemetry from FastAPI + WebSocket.' : 'Showing seeded telemetry. Start the backend for live updates.'}</span>
+        </div>
+      </section>
+
+      <section className="workspace page-width" data-reveal="section">
+        <div className="workspace-toolbar">
+          <div>
+            <span className="tiny-label">FLEET OVERVIEW</span>
+            <h2>Six containers, one clear picture.</h2>
+          </div>
+          <div className="toolbar-stats">
+            <HeaderStat label="Pipelines" value={stats?.total_pipelines ?? groups.length} />
+            <HeaderStat label="Monitored" value={stats?.total_containers ?? containers.length} />
+            <HeaderStat label="At risk" value={stats?.at_risk_now ?? 0} accent="red" />
+            <HeaderStat label="Actions" value={stats?.total_actions ?? auditLog.length} accent="violet" />
+          </div>
+        </div>
+
+        <nav className="workspace-tabs" aria-label="Workspace views">
+          {['fleet', 'topology', 'audit'].map((tab) => (
+            <button key={tab} className={`tab-btn ${view === tab ? 'active' : ''}`} onClick={() => setView(tab)}>
+              {tab === 'fleet' ? 'Fleet' : tab === 'topology' ? 'Topology' : 'Audit trail'}
+            </button>
+          ))}
+        </nav>
+
+        {view === 'fleet' && (
+          <div className="fleet-panel">
+            <div className="panel-heading">
+              <div><span className="tiny-label">LIVE CONTAINERS</span><p>{containers.length} services · grouped by pipeline · sorted by urgency inside each group</p></div>
+              <span className="panel-dot"><span /> streaming</span>
+            </div>
+            {groups.map((group) => (
+              <PipelineGroup key={group.pipeline} group={group} onInject={onInject} onSelect={onSelect} />
+            ))}
+          </div>
+        )}
+
+        {view === 'topology' && (
+          <div className="topology-panel">
+            <div className="panel-heading">
+              <div><span className="tiny-label">PIPELINE MAP</span><p>Click any container node to drill into its live signals</p></div>
+              <span className="panel-dot"><span /> interactive</span>
+            </div>
+            <TopologyGraph containers={ordered} selectedId={selectedId} onSelect={(c) => onSelect(c.id)} />
+          </div>
+        )}
+
+        {view === 'audit' && (
+          <div className="audit-page-wrap"><AuditLog entries={auditLog} /></div>
+        )}
+
+        <aside className="test-card">
+          <span className="tiny-label">DEMO CONTROLS</span>
+          <p>Inject a harmless burst or a sustained risk into any container and watch the loop decide.</p>
+        </aside>
+      </section>
+
+      {selected && (
+        <ContainerDetail container={selected} history={history.get(selected.id) ?? []} onClose={() => onSelect(null)} />
+      )}
+    </main>
+  );
 }
+
 function HeaderStat({ label, value, accent }) { return <div className={`header-stat ${accent ? `header-stat-${accent}` : ''}`}><strong>{value}</strong><span>{label}</span></div>; }

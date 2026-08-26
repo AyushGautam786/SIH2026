@@ -1,0 +1,63 @@
+# Pulse - full stack (production topology on one machine)
+# Usage:  docker compose up --build
+#
+# Services:
+#   redis      telemetry fan-in + TTL cooldown keys   (PPTX slides 5/9)
+#   postgres   TimescaleDB metrics + audit trail      (PPTX slide 6)
+#   backend    FastAPI control engine + ML inference
+#   frontend   nginx-served React dashboard, proxies /api and /ws
+#
+# The backend degrades gracefully: with no REDIS_URL / PULSE_DB_DSN set it
+# uses the in-memory cooldown and SQLite stores (demo-anywhere guarantee).
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: pulse
+      POSTGRES_PASSWORD: pulse
+      POSTGRES_DB: pulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      PULSE_REDIS_URL: redis://redis:6379/0
+      PULSE_DB_DSN: postgresql://pulse:pulse@postgres:5432/pulse
+      PULSE_METRICS_DSN: postgresql://pulse:pulse@postgres:5432/pulse
+      PULSE_EXECUTOR: simulated
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:

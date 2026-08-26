@@ -22,30 +22,45 @@ Pulse is a real-time container fleet monitoring system that goes beyond simple t
 
 ```
 pulse/
-├── README.md
+├── TASKS.md                         # Master task list / agent continuity doc
+├── docker-compose.yml               # redis + timescale + backend + frontend
+├── .env.example                     # Optional production env vars
 │
-├── backend/                       # Python / FastAPI
+├── backend/                         # Python / FastAPI control engine
 │   ├── requirements.txt
-│   ├── main.py                    # FastAPI app + detect-predict-heal loop
-│   ├── interfaces.py              # Abstract contracts for 4 swap-points
-│   ├── simulator.py               # SimulatedFleet (TelemetrySource impl)
-│   ├── ml_model.py                # Random Forest, feature extraction
-│   ├── control.py                 # CooldownStore + ActionExecutor
-│   └── store.py                   # SQLiteAuditStore
+│   ├── main.py                      # Wiring + detect-predict-heal loop (3s ticks)
+│   ├── interfaces.py                # Abstract contracts for the swap-points
+│   ├── registry.py                  # Pipeline Registry (pipeline isolation)
+│   ├── simulator.py                 # SimulatedFleet: CPU/mem/net/disk/RX-TX/TCP/drops
+│   ├── ml_model.py                  # Random Forest, 8-feature vector, joblib persist
+│   ├── control.py                   # Cooldowns + CircuitBreaker + EscalationThrottle
+│   ├── redis_bridge.py              # Redis TTL cooldown (graceful fallback)
+│   ├── executor.py                  # Simulated | Docker action executors
+│   ├── store.py                     # SQLite/Postgres audit + SQLite/Timescale metrics
+│   └── tests/
+│       ├── test_ml.py               # Feature contract + accuracy >0.95
+│       ├── test_control.py          # Cooldown scoping, breaker trip/recover
+│       ├── test_store.py            # Audit + metrics roundtrips
+│       ├── test_registry.py         # Pipeline scoping + worst-state rollups
+│       └── stress_test.py           # 120 pipelines / 360 containers hardening
 │
-└── frontend/                      # React + Vite
-    ├── package.json
-    ├── vite.config.js
-    ├── index.html
+├── agent/                           # Production telemetry path (PPTX layer 1)
+│   ├── pulse_agent.cpp              # C++17 Docker-socket agent (zero deps)
+│   ├── pulse_agent.py               # Python reference agent
+│   └── README.md                    # Build/run instructions
+│
+└── frontend/                        # React + Vite dashboard (no chart libs)
+    ├── Dockerfile / nginx.conf      # nginx serving dist, proxies /api + /ws
     └── src/
-        ├── main.jsx
-        ├── App.jsx                # Root: WebSocket + state management
-        ├── App.css                # Component styles (glassmorphism theme)
-        ├── index.css              # Design tokens + global styles
+        ├── App.jsx                  # Landing page + tabbed workspace
+        ├── lib/api.js               # WS/REST client + fleet helpers
         └── components/
-            ├── Header.jsx         # Brand + stat chips + connection badge
-            ├── ContainerCard.jsx  # Per-container card with metric bars
-            └── AuditLog.jsx       # Scrolling autonomous action log
+            ├── PipelineGroup.jsx    # Fleet grouped by pipeline (worst-state)
+            ├── TopologyGraph.jsx    # SVG pipeline→container topology map
+            ├── ContainerCard.jsx    # Per-container card with metric bars
+            ├── ContainerDetail.jsx  # Drill-down drawer w/ live charts + features
+            ├── MetricChart.jsx      # SVG sparkline/area charts
+            └── AuditLog.jsx         # Scrolling autonomous action log
 ```
 
 ---
@@ -76,20 +91,39 @@ Open **http://localhost:5173** in your browser. The dashboard connects to the ba
 
 ## 🔬 The ML Model
 
-The classifier is a `RandomForestClassifier` (150 trees, depth 8) trained on **synthetic data shaped to match the three simulator scenarios**. It learns to distinguish:
+The classifier is a `RandomForestClassifier` (150 trees, depth 8). It trains
+once on a synthetic incident corpus shaped like the simulator's scenarios and
+persists to `backend/models/rf_model.joblib` — subsequent startups load the
+offline-trained artifact instantly (PPTX slide 10: trained offline, loaded for
+live inference).
 
-| Class | CPU | Mem | Net | Rolling Avg CPU | Mem Delta |
-|---|---|---|---|---|---|
-| `healthy` | ~20% | ~30% | ~50% | similar to current | stable |
-| `transient_spike` | ~78% | ~35% | ~85% | **moderate** (key!) | stable |
-| `at_risk` | ~85% | ~78% | ~65% | **high** (sustained) | **growing** |
+It distinguishes three states:
 
-The critical insight is **rolling average CPU** + **memory delta** — a spike has high *current* CPU but a still-moderate *average*, while `at_risk` has both high and sustained. This is what prevents the system from overreacting to short bursts.
+| Class | Meaning | Response |
+|---|---|---|
+| `healthy` | Normal load pattern | none |
+| `transient_spike` | Harmless burst — high *now*, low rolling avg | ignored |
+| `at_risk` | Sustained/worsening — includes pre-failure precursors | heal |
 
-**Feature vector** (6 features per prediction):
+**Feature vector** (8 features, PPTX slides 10/13):
+
 ```
-[cpu_latest, mem_latest, net_latest, cpu_rolling_avg, mem_delta, net_std]
+cpu           latest CPU %
+mem           latest memory %
+net           latest network load %
+cpu_avg_1m    rolling mean CPU ~1 min   → bursts vs sustained
+cpu_avg_5m    rolling mean CPU ~5 min   → slow failure ramps
+mem_delta_30s memory change ~30 s       → leak detection
+net_std_1m    network volatility ~1 min → erratic traffic
+cpu_mem_ratio CPU/MEM imbalance         → maxed-CPU/idle-RAM anomalies
 ```
+
+**Predictive labeling**: part of the `at_risk` training class comes from the
+~3-minute window preceding a simulated crash (readings still mid-range, trend
+already climbing) so Pulse acts on failure *precursors*, not just failures.
+
+Fleet-scale hot path: `predict_batch()` classifies the entire fleet in ONE
+forest pass per tick (360 containers ≈ 20 ms end-to-end — see stress test).
 
 ---
 
@@ -115,9 +149,13 @@ Every piece of infrastructure this prototype simulates sits behind a formal inte
 | `GET` | `/api/health` | Liveness check |
 | `GET` | `/api/containers` | Current snapshot of all containers |
 | `GET` | `/api/audit?limit=50` | Recent autonomous actions (most recent first) |
-| `GET` | `/api/stats` | Aggregated fleet stats (at-risk count, total actions) |
+| `GET` | `/api/stats` | Aggregated fleet stats (pipelines, at-risk, actions, breaker) |
+| `GET` | `/api/pipelines` | Pipeline rollup — status = worst container state |
+| `GET` | `/api/history/{container_id}?points=120` | Time-series metrics (charts) |
+| `GET` | `/api/model/info` | Feature list, importances, artifact path |
+| `GET` | `/api/config` | Runtime config + safety-layer status |
 | `POST` | `/api/inject/{container_id}/{spike\|at_risk}` | Demo: inject a scenario |
-| `WS` | `/ws` | Live tick stream pushed every 2 seconds |
+| `WS` | `/ws` | Live tick stream pushed every 3 seconds |
 
 ### WebSocket message format
 
@@ -146,7 +184,7 @@ Every piece of infrastructure this prototype simulates sits behind a formal inte
 
 ## 🎬 Demo Guide
 
-1. **Observe the fleet** — six simulated containers across three pipelines, streaming live CPU/mem/net every 2 seconds.
+1. **Observe the fleet** — six simulated containers across three pipelines, streaming live CPU/mem/net/disk/RX-TX/TCP every 3 seconds.
 
 2. **Click "🔥 Inject At-Risk"** on any card:
    - Watch the badge flip to `AT RISK`
@@ -211,3 +249,54 @@ vite ^6
 ---
 
 *Built as a self-contained prototype demonstrating the full Pulse architecture in a single process.*
+
+---
+
+## 🛡 Safety Layer (Anti-Thrashing)
+
+Two independent guards protect the fleet from Pulse itself:
+
+1. **Scoped cooldown (per container, per pipeline)** - after acting on a
+   container it is protected for `COOLDOWN_SECONDS = 20`. Keys are scoped as
+   `cooldown:{pipeline_id}:{container_id}` (in-memory in the prototype,
+   Redis TTL keys via `redis_bridge.py` in production) so one pipeline's
+   cooldown can never suppress another pipeline's legitimate remediation.
+
+2. **Fleet-wide circuit breaker** - a sliding window (`6 actions / 60 s`).
+   Under a systemic event the breaker trips, autonomous action stops, and
+   throttled **ESCALATE** rows appear in the audit trail instead of hundreds
+   of restarts. Verified by `tests/stress_test.py` under mass failure.
+
+## 📡 Telemetry Agents (production path)
+
+`agent/` contains both implementations of the telemetry contract described on
+PPTX slide 7: a zero-dependency **C++17 agent** reading the Docker unix socket
+and a Python reference agent. Both emit one JSON line per container every 3 s
+tagged with the container's `pulse.pipeline` label, and optionally PUBLISH to
+Redis on `pulse.telemetry`. See `agent/README.md`.
+
+## 🐳 Full Stack with Docker Compose
+
+```bash
+docker compose up --build
+# dashboard  -> http://localhost:8080
+# backend API -> http://localhost:8000/api/health
+```
+
+Brings up Redis (fan-in + TTL cooldowns), TimescaleDB (metrics + audit), the
+FastAPI control engine, and an nginx-served dashboard that proxies `/api`
+and `/ws`. Without those services configured the backend automatically falls
+back to SQLite + in-memory stores - the demo never depends on infrastructure.
+
+## ✅ Tests & Hardening
+
+```bash
+cd backend
+python -m pytest tests -q          # 25 unit tests
+python -m tests.stress_test        # 120 pipelines / 360 containers
+```
+
+The stress test asserts: tick latency stays within budget (~20 ms avg for 360
+containers thanks to batched inference), the circuit breaker trips under mass
+failure injection instead of firing 360 restarts, and cooldown scoping holds
+across pipelines.

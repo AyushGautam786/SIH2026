@@ -1,0 +1,9 @@
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+backend/models/*.joblib
+backend/pulse_audit.db
+backend/pulse_metrics.db
+frontend/node_modules/
+frontend/dist/
+.git/

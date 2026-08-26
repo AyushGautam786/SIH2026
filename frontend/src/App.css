@@ -131,3 +131,62 @@ body::before { opacity: .26; mask-image: linear-gradient(to bottom, black, trans
 .telemetry-card::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.08) 50%, transparent 65%); transform: translateX(-130%); animation: shimmer-sweep 8s ease-in-out infinite; }.telemetry-card { position: relative; overflow: hidden; }
 @media (max-width: 760px) { .ambient-orb { opacity: .34; }.telemetry-card::after { animation-duration: 11s; } }
 @media (prefers-reduced-motion: reduce) { .ambient-canvas::after, .telemetry-card::after { animation: none; } }
+
+/* ==========================================================================
+   Pulse completion pass: workspace tabs, pipeline groups, topology, drawer
+   ========================================================================== */
+
+.workspace-tabs { display: flex; gap: 8px; margin-bottom: 22px; }
+.tab-btn { padding: 10px 20px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: 600 12px var(--sans); letter-spacing: .02em; transition: all 180ms var(--ease-out); }
+.tab-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+.tab-btn.active { background: var(--violet); border-color: var(--violet); color: var(--canvas); }
+
+.pipeline-group { margin-top: 26px; }
+.pipeline-group:first-of-type { margin-top: 0; }
+.pipeline-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.pipeline-title { display: flex; align-items: center; gap: 10px; }
+.pipeline-title h3 { margin: 0; font: 600 16px var(--display); letter-spacing: -.02em; }
+.pipeline-marker { width: 9px; height: 9px; display: inline-block; transform: rotate(45deg); background: var(--state-color, var(--violet)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--state-color, #c09aff) 22%, transparent); }
+.state-badge.small { font-size: 9px; padding: 3px 8px; }
+.pipeline-meta { font-size: 11px; color: var(--muted-light); }
+
+.topology-panel { padding: 18px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface-muted-08, rgba(255,250,242,.04)); }
+.topology-wrap { overflow-x: auto; }
+.topology-svg { width: 100%; min-height: 320px; height: auto; }
+.topo-pipeline-name { fill: var(--ink); font: 600 13px var(--display); letter-spacing: -.01em; }
+.topo-pipeline-status { font: 500 9px var(--mono); letter-spacing: .12em; }
+.topo-cname { fill: var(--ink); font: 500 11px var(--sans); cursor: pointer; }
+.topo-cmeta { fill: var(--muted-light); font: 400 9px var(--mono); }
+.topo-container { cursor: pointer; transition: opacity 160ms var(--ease-out); }
+.topo-container:hover rect { filter: brightness(1.15); }
+
+.audit-page-wrap { padding: 6px 2px; }
+.audit-page-wrap .audit-log { max-height: 560px; }
+
+.metric-chart { position: relative; display: block; width: 100%; }
+.metric-chart svg { display: block; width: 100%; height: auto; }
+.metric-chart-label { position: absolute; top: 4px; left: 8px; right: 8px; display: flex; justify-content: space-between; align-items: center; font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-light); pointer-events: none; }
+.metric-chart-label strong { color: var(--ink); font-weight: 500; }
+
+.drawer-scrim { position: fixed; inset: 0; z-index: 40; background: rgba(24,23,32,.55); backdrop-filter: blur(3px); animation: fade-in 180ms var(--ease-out); }
+.detail-drawer { position: fixed; z-index: 41; top: 0; right: 0; bottom: 0; width: min(480px, 94vw); overflow-y: auto; background: var(--canvas-warm); border-left: 1px solid var(--line-strong); padding: 28px 26px 34px; box-shadow: -30px 0 60px rgba(0,0,0,.35); animation: slide-in 240ms var(--ease-out); }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes slide-in { from { transform: translateX(40px); opacity: 0; } }
+.drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 22px; }
+.drawer-head h2 { margin: 6px 0 4px; font: 600 24px var(--display); letter-spacing: -.03em; }
+.drawer-sub { font-size: 11px; color: var(--muted-light); }
+.drawer-head-right { display: flex; align-items: center; gap: 10px; }
+.drawer-close { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line-strong); background: none; color: var(--ink); font-size: 13px; }
+.drawer-close:hover { background: var(--red-dim); border-color: var(--red); }
+.drawer-charts { display: grid; gap: 14px; margin-bottom: 22px; }
+.drawer-section { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
+.feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.feature-cell { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.feature-cell span { font-size: 10px; color: var(--muted-light); letter-spacing: .06em; }
+.feature-cell strong { font: 500 15px var(--mono); }
+.feature-accent { border-color: var(--orange); background: var(--orange-dim); }
+.decision-rows { margin-top: 12px; display: grid; gap: 8px; }
+.decision-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.decision-row strong { color: var(--ink); font-weight: 500; }
+.drawer-note { margin-top: 22px; font-size: 11px; color: var(--muted-light); line-height: 1.6; }
+.drawer-empty { font-size: 12px; color: var(--muted-light); }
